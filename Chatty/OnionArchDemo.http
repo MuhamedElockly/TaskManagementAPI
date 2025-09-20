@@ -1,0 +1,6 @@
+@OnionArchDemo_HostAddress = http://localhost:5281
+
+GET {{OnionArchDemo_HostAddress}}
+Accept: application/json
+
+###
