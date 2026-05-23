@@ -7,8 +7,9 @@ using Microsoft.AspNetCore.Identity;
 
 namespace Domain.Entities.IdentityEntity
 {
-	public class ApplicationUser : IdentityUser
-	{
-
-	}
+    public class ApplicationUser : IdentityUser
+    {
+        public DateTime? LastLoginUtc { get; set; }
+        public ICollection<RefreshToken>? RefreshTokens { get; set; } = new List<RefreshToken>();
+    }
 }

@@ -6,9 +6,10 @@ using System.Threading.Tasks;
 
 namespace SharedData.DTOs
 {
-	public class LoginResultDTO
-	{
-		public string Token { get; set; }
-		public string IsBlocked { get; set; }
-	}
+    public class LoginResultDTO
+    {
+        public string AccessToken { get; set; }
+        public string RefreshToken { get; set; }
+
+    }
 }
