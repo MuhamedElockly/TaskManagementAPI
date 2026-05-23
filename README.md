@@ -2,8 +2,128 @@
 
 A .NET 8 Web API for managing **projects** and **tasks** with JWT authentication. The solution is organized as a layered application that demonstrates enterprise patterns: clean architecture, dependency injection, SOLID, DTOs, global exception handling, validation, specification pattern, structured logging, and more.
 
+---
+
+## Live demo (hosted for testing)
+
+This project is **published online** on [MonsterASP.NET](https://www.monsterasp.net/) so you can test the API without running it locally.
+
+| Resource | Link |
+|----------|------|
+| **Swagger UI (try the API)** | [http://taskmanagementapielectropiasessment.runasp.net/swagger/index.html](http://taskmanagementapielectropiasessment.runasp.net/swagger/index.html) |
+| **API root** | [http://taskmanagementapielectropiasessment.runasp.net/](http://taskmanagementapielectropiasessment.runasp.net/) (redirects to Swagger) |
+| **Health check** | [http://taskmanagementapielectropiasessment.runasp.net/health](http://taskmanagementapielectropiasessment.runasp.net/health) |
+| **OpenAPI JSON** | [http://taskmanagementapielectropiasessment.runasp.net/swagger/v1/swagger.json](http://taskmanagementapielectropiasessment.runasp.net/swagger/v1/swagger.json) |
+
+### Quick test flow (Swagger)
+
+1. Open **[Swagger UI](http://taskmanagementapielectropiasessment.runasp.net/swagger/index.html)**.
+2. `POST /api/Auth/Register` — create a test user (or use `POST /api/Auth/Login` if you already registered).
+3. Copy `accessToken` from the login response.
+4. Click **Authorize** → enter: `Bearer {your-access-token}`.
+5. Call `GET /api/Project`, `POST /api/Project`, `GET /api/Task/project/{projectId}`, etc.
+
+---
+
+## Production database connection
+
+The hosted API uses this **SQL Server** database on MonsterASP (also in `Chatty/appsettings.Production.json`):
+
+```json
+"ConnectionStrings": {
+  "DefaultConnection": "Server=db53352.databaseasp.net; Database=db53352; User Id=db53352; Password=7d_Y-6Xc5Wr!; Encrypt=False; MultipleActiveResultSets=True;"
+}
+```
+
+| Setting | Value |
+|---------|--------|
+| **Server** | `db53352.databaseasp.net` |
+| **Database** | `db53352` |
+| **User Id** | `db53352` |
+| **Password** | `7d_Y-6Xc5Wr!` |
+| **Encrypt** | `False` |
+| **MultipleActiveResultSets** | `True` |
+
+**Full ADO.NET / EF connection string (one line):**
+
+```
+Server=db53352.databaseasp.net; Database=db53352; User Id=db53352; Password=7d_Y-6Xc5Wr!; Encrypt=False; MultipleActiveResultSets=True;
+```
+
+Use this string in **SSMS**, **Azure Data Studio**, or `dotnet ef` when applying migrations to the same database as production.
+
+> **Note:** Credentials are included here for demo and course/testing access. For a real production app, store secrets in environment variables or the hosting control panel, not in public documentation.
+
+---
+
+## Database migrations (initialize a new database)
+
+Migrations live in `Presistence/Migrations/`. Use them to create or update schema on a **new** SQL Server database (local or MonsterASP).
+
+### Option 1 — Automatic on startup (hosted site)
+
+Production config enables:
+
+```json
+"Database": { "ApplyMigrationsOnStartup": true }
+```
+
+When the API starts, it runs `MigrateAsync()` and creates/updates tables (`AspNetUsers`, `Projects`, `Tasks`, `RefreshTokens`, etc.).
+
+### Option 2 — Manual from your machine (recommended for new DB)
+
+**Prerequisites:** [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0), EF Core tools:
+
+```bash
+dotnet tool install --global dotnet-ef
+```
+
+**Apply all migrations** (local SQL Server example):
+
+```bash
+cd Presistence
+dotnet ef database update --startup-project ../Chatty
+```
+
+**Apply migrations to the hosted MonsterASP database** (paste the production connection string):
+
+```bash
+cd Presistence
+dotnet ef database update --startup-project ../Chatty --connection "Server=db53352.databaseasp.net; Database=db53352; User Id=db53352; Password=7d_Y-6Xc5Wr!; Encrypt=False; MultipleActiveResultSets=True;"
+```
+
+### Option 3 — Create a new migration (after model changes)
+
+```bash
+cd Presistence
+dotnet ef migrations add YourMigrationName --startup-project ../Chatty
+dotnet ef database update --startup-project ../Chatty
+```
+
+### Tables created by migrations
+
+| Table | Purpose |
+|-------|---------|
+| `AspNetUsers`, `AspNetRoles`, … | Identity (login/register) |
+| `Projects` | User-owned projects |
+| `Tasks` | Tasks linked to projects |
+| `RefreshTokens` | JWT refresh tokens |
+
+### Optional sample data
+
+After migrations and at least one registered user, run:
+
+`Presistence/Scripts/SeedProjectsAndTasks.sql`
+
+See [Presistence/Scripts/README.md](Presistence/Scripts/README.md).
+
+---
+
 ## Table of contents
 
+- [Live demo (hosted for testing)](#live-demo-hosted-for-testing)
+- [Production database connection](#production-database-connection)
+- [Database migrations (initialize a new database)](#database-migrations-initialize-a-new-database)
 - [Architecture Requirements](#architecture-requirements)
 - [Additional Requirements & Patterns](#additional-requirements--patterns)
 - [Solution structure](#solution-structure)
@@ -13,7 +133,8 @@ A .NET 8 Web API for managing **projects** and **tasks** with JWT authentication
 - [Specification pattern (detailed)](#specification-pattern-detailed)
 - [Logging (detailed)](#logging-detailed)
 - [Additional features (detailed)](#additional-features-detailed)
-- [Getting started](#getting-started)
+- [Getting started (local development)](#getting-started-local-development)
+- [Hosting on MonsterASP.NET](#hosting-on-monsteraspnetnet)
 - [Tech stack](#tech-stack)
 
 ## Architecture Requirements
@@ -501,7 +622,9 @@ All core entities inherit `BaseEntity<TK>` with a typed `Id` property, enabling 
 - SQL Server (LocalDB, Express, or full instance)
 - Optional: Visual Studio 2022 or VS Code
 
-## Getting started
+## Getting started (local development)
+
+For local work, use LocalDB (default in `Chatty/appsettings.json`). The **hosted demo** uses the [production connection string](#production-database-connection) above.
 
 ### 1. Clone and restore
 
@@ -557,6 +680,18 @@ dotnet run
 | AutoMapper | DTO ↔ entity mapping |
 | Serilog | Logging |
 | Swashbuckle | OpenAPI / Swagger |
+
+## Hosting on MonsterASP.NET
+
+**Live instance:** [http://taskmanagementapielectropiasessment.runasp.net/swagger/index.html](http://taskmanagementapielectropiasessment.runasp.net/swagger/index.html)
+
+See **[docs/DEPLOY_MONSTERASP.md](docs/DEPLOY_MONSTERASP.md)** for full deployment steps (WebDeploy, MSSQL, migrations, Swagger).
+
+Quick steps to publish your own copy:
+1. Create site + MSSQL database in [Monster control panel](https://admin.monsterasp.net/).
+2. Copy `Chatty/appsettings.Production.json.example` → `appsettings.Production.json` and paste your connection string.
+3. Run [migrations](#database-migrations-initialize-a-new-database) against the new database.
+4. Publish **Chatty** with the downloaded `.publishSettings` profile (Release, **net8.0**, **win-x86** if required).
 
 ## Additional documentation
 
