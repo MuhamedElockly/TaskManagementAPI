@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.9.34728.123
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Chatty", "Chatty\Chatty.csproj", "{77C4C872-3295-49F2-9910-D0FF7409E747}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TaskManagementApi", "Chatty\TaskManagementApi.csproj", "{77C4C872-3295-49F2-9910-D0FF7409E747}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Core", "Core", "{427D117E-C32E-4622-86E1-A12D5088F7B9}"
 EndProject
