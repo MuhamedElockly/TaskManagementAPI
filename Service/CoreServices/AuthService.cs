@@ -102,7 +102,7 @@ namespace Service.CoreServices
 
                     var refreshRepo = _unitOfWork.GetRepository<RefreshToken, int>();
                     await refreshRepo.AddAsync(refreshToken);
-                    _unitOfWork.SaveChangesAsync();
+                    await _unitOfWork.SaveChangesAsync();
 
                     return new ApiResponse<LoginResultDTO>()
 
@@ -213,28 +213,21 @@ namespace Service.CoreServices
 
         {
 
-            return await _logger.LogOperation("Create new user", async () =>
+            return await _logger.LogOperationAsync("Create new user", async () =>
 
             {
-
-
 
                 ApplicationUser existingUser = await _userManager.FindByEmailAsync(registerDTO.Email);
 
                 if (existingUser != null)
 
                 {
-
-
-
                     return new ApiResponse<RegisterResultDTO>()
 
                     {
 
                         Success = false,
-
                         Message = "User already exist",
-
                         Data = null
 
                     };
@@ -248,18 +241,10 @@ namespace Service.CoreServices
                 {
 
                     UserName = registerDTO.Email,
-
                     Email = registerDTO.Email,
-
                     PhoneNumber = registerDTO.PhoneNumber,
-
                     EmailConfirmed = true,
-
                     PhoneNumberConfirmed = true,
-
-
-
-
 
                 };
 
@@ -268,12 +253,6 @@ namespace Service.CoreServices
                 if (result == null)
 
                 {
-
-
-
-
-
-
 
                     return new ApiResponse<RegisterResultDTO>()
 
@@ -309,26 +288,36 @@ namespace Service.CoreServices
 
                     };
 
-
-
                 }
 
                 else
 
                 {
 
-                    await _userManager.AddToRoleAsync(newUser, registerDTO.Role.ToString());
+                    var roleName = GetRoleName(registerDTO.Role);
+                    var addRoleResult = await _userManager.AddToRoleAsync(newUser, roleName);
+                    if (!addRoleResult.Succeeded)
+                    {
+                        var roleErrors = string.Join(", ", addRoleResult.Errors.Select(e => e.Description));
+                        _logger.LogError($"Failed to assign role '{roleName}' to user: {roleErrors}");
+                        return new ApiResponse<RegisterResultDTO>()
+                        {
+                            Success = false,
+                            Message = $"Registration succeeded but role assignment failed: {roleErrors}",
+                            Data = null
+                        };
+                    }
 
                     var roles = await _userManager.GetRolesAsync(newUser);
 
-                    var token = GenerateToken(newUser, (List<string>)roles);
+                    var token = GenerateToken(newUser, roles.ToList());
 
                     var resultDTO = new RegisterResultDTO()
 
                     {
 
                         Token = token,
-
+                        UserId = await _userManager.GetUserIdAsync(newUser)
                     };
 
                     return new ApiResponse<RegisterResultDTO>()
@@ -358,8 +347,6 @@ namespace Service.CoreServices
             return Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
 
         }
-
-
 
         public async Task<ApiResponse<RegisterResultDTO>> RefreshAccessToken(string token)
 
@@ -419,8 +406,6 @@ namespace Service.CoreServices
 
             {
 
-
-
                 _logger.LogError("Invalid token");
 
                 return new ApiResponse<RegisterResultDTO>()
@@ -440,6 +425,14 @@ namespace Service.CoreServices
 
 
         }
+
+        private static string GetRoleName(Roles role) =>
+            role switch
+            {
+                Roles.Admin => nameof(Roles.Admin),
+                Roles.NormalUser => nameof(Roles.NormalUser),
+                _ => nameof(Roles.NormalUser)
+            };
 
     }
 

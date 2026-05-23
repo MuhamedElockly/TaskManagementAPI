@@ -1,6 +1,20 @@
 # Task Management API
 
-A .NET 8 Web API for managing **projects** and **tasks** with JWT authentication. The solution is organized as a layered application that demonstrates enterprise patterns: clean architecture, dependency injection, SOLID, DTOs, global exception handling, and validation.
+A .NET 8 Web API for managing **projects** and **tasks** with JWT authentication. The solution is organized as a layered application that demonstrates enterprise patterns: clean architecture, dependency injection, SOLID, DTOs, global exception handling, validation, specification pattern, structured logging, and more.
+
+## Table of contents
+
+- [Architecture Requirements](#architecture-requirements)
+- [Additional Requirements & Patterns](#additional-requirements--patterns)
+- [Solution structure](#solution-structure)
+- [Features](#features)
+- [API endpoints](#api-endpoints)
+- [Architecture deep dive](#architecture-deep-dive)
+- [Specification pattern (detailed)](#specification-pattern-detailed)
+- [Logging (detailed)](#logging-detailed)
+- [Additional features (detailed)](#additional-features-detailed)
+- [Getting started](#getting-started)
+- [Tech stack](#tech-stack)
 
 ## Architecture Requirements
 
@@ -458,10 +472,14 @@ Controllers map these messages to `401 Unauthorized`, `404 Not Found`, or `400 B
 - **Migrations:** Under `Presistence/Migrations`
 - **Resilience:** `EnableRetryOnFailure()` on SQL Server connection
 
-### CORS & API documentation
+### CORS & API documentation (Swagger / OpenAPI)
 
-- **CORS:** `AllowAll` policy (any origin, header, method) — suitable for local/dev frontends.
-- **Swagger:** Enabled in Development; use **Authorize** with `Bearer {token}` for protected endpoints.
+- **Swagger UI:** `https://localhost:<port>/swagger` (Development environment).
+- **OpenAPI spec:** `https://localhost:<port>/swagger/v1/swagger.json`
+- **JWT in Swagger:** Click **Authorize**, enter `Bearer {accessToken}` (from Login response).
+- **Documentation includes:** API description, endpoint summaries, response types (200/400/401/404/409/500), DTO schema descriptions from XML comments.
+- **Configuration:** `Chatty/Swagger/SwaggerServiceExtensions.cs`
+- **CORS:** `AllowAll` policy for local/dev frontends.
 
 ### Error models
 
@@ -525,7 +543,7 @@ dotnet run
 ```
 
 - **Swagger UI:** `https://localhost:<port>/swagger` (Development)
-- Use **Login** or **Register**, then authorize in Swagger with `Bearer <token>` for protected endpoints.
+- **Try it:** `POST /api/Auth/Login` → copy `data.accessToken` → **Authorize** → `Bearer {token}` → call Project/Task endpoints.
 
 ## Tech stack
 
@@ -543,6 +561,8 @@ dotnet run
 ## Additional documentation
 
 - [LOGGING_GUIDE.md](LOGGING_GUIDE.md) — Serilog setup and `ILoggingService` usage examples.
+- [Presistence/Scripts/SeedProjectsAndTasks.sql](Presistence/Scripts/SeedProjectsAndTasks.sql) — SQL script to seed sample projects and tasks.
+- [Presistence/Scripts/README.md](Presistence/Scripts/README.md) — How to run the seed script.
 
 ## License
 

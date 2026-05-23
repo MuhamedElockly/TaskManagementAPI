@@ -6,11 +6,10 @@ using System.Threading.Tasks;
 
 namespace SharedData.DTOs
 {
-	public class RegisterResultDTO
-	{
-		public bool IsSuccess { get; set; }
-		public string Message { get; set; }
-		public string? Token { get; set; }
-		public int? UserId { get; set; }
-	}
+    public class RegisterResultDTO
+    {
+
+        public string? Token { get; set; }
+        public string? UserId { get; set; }
+    }
 }

@@ -1,20 +1,21 @@
 
 using Domain.Entities.IdentityEntity;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.IdentityModel.Tokens;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.IdentityModel.Tokens;
 using Presistence;
 using Presistence.Data;
 using Serilog;
 using Service;
 using System.Text;
 using ECommerce.CustomMiddlewares;
+using ECommerce.Swagger;
+
 namespace ECommerce
 {
 	public class Program
 	{
-		public static void Main(string[] args)
+		public static async Task Main(string[] args)
 		{
 			var builder = WebApplication.CreateBuilder(args);
 			builder.Services.AddCors(options =>
@@ -68,17 +69,17 @@ namespace ECommerce
 			builder.Host.UseSerilog((context, configuration) =>
 			configuration.ReadFrom.Configuration(context.Configuration)
 			);
-			// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
-			builder.Services.AddEndpointsApiExplorer();
-			builder.Services.AddSwaggerGen();
+			builder.Services.AddSwaggerDocumentation();
 
 			var app = builder.Build();
+
+			await IdentityRoleSeeder.SeedAsync(app.Services);
+
 			app.UseCors("AllowAll");
-			// Configure the HTTP request pipeline.
+
 			if (app.Environment.IsDevelopment())
 			{
-				app.UseSwagger();
-				app.UseSwaggerUI();
+				app.UseSwaggerDocumentation();
 			}
 
 			app.UseSerilogRequestLogging();
