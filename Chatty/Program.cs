@@ -25,7 +25,7 @@ namespace ECommerce
 									.AllowAnyMethod()
 					);
 			});
-			builder.Services.AddSignalR();
+		
 			#region Identity & Authentication
 			builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
 						   .AddEntityFrameworkStores<ApplicationDbContext>()
@@ -83,7 +83,7 @@ namespace ECommerce
 
 			app.UseSerilogRequestLogging();
 			#region Exception Handler Middleware Configuration
-			//app.UseMiddleware<CustomExceptionMiddleware>();
+			app.UseMiddleware<CustomExceptionMiddleware>();
 			#endregion
 			app.UseHttpsRedirection();
 

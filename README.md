@@ -1,793 +1,280 @@
-# 🏗️ OnionArchDemo - .NET Onion Architecture Demo
+# Task Management API
 
-[![.NET](https://img.shields.io/badge/.NET-8.0-blue.svg)](https://dotnet.microsoft.com/)
-[![Architecture](https://img.shields.io/badge/Architecture-Onion-orange.svg)](https://en.wikipedia.org/wiki/Onion_architecture)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+A .NET 8 Web API for managing **projects** and **tasks** with JWT authentication. The solution is organized as a layered application that demonstrates enterprise patterns: clean architecture, dependency injection, SOLID, DTOs, global exception handling, and validation.
 
-A comprehensive .NET demo project showcasing **Onion Architecture** with clean separation of concerns, dependency inversion, and enterprise-level patterns. This project serves as a reference implementation for building scalable, maintainable .NET applications.
+## Architecture Requirements
 
-## 📋 Table of Contents
+The project demonstrates the following architectural and design practices:
 
-- [🏗️ Overview](#-overview)
-- [🎯 Architecture](#-architecture)
-- [📊 Logging Architecture](#-logging-architecture)
-- [📁 Project Structure](#-project-structure)
-- [🚀 Features](#-features)
-- [⚙️ Prerequisites](#️-prerequisites)
-- [🛠️ Installation & Setup](#️-installation--setup)
-- [🏃‍♂️ Running the Application](#️-running-the-application)
-- [📊 Database Configuration](#-database-configuration)
-- [🔧 Configuration](#-configuration)
-- [🧪 Testing](#-testing)
-- [📚 API Documentation](#-api-documentation)
-- [🤝 Contributing](#-contributing)
-- [📄 License](#-license)
+| Requirement | How it is implemented in this project |
+|-------------|----------------------------------------|
+| **Clean Architecture** | Layers depend inward: **Domain** (entities, contracts, exceptions) has no infrastructure references; **Service** implements business logic; **Presistence** handles EF Core and repositories; **Presentation** exposes HTTP APIs; **Chatty** (`TaskManagementApi`) is the composition root that wires everything together. |
+| **Dependency Injection** | Services are registered in extension methods (`AddPresistenceConfig`, `AddServiceConfiguration`) and consumed via constructor injection in controllers and services. ASP.NET Core Identity and JWT authentication are also registered in `Program.cs`. |
+| **SOLID Principles** | **S**ingle responsibility per layer (e.g. `ProjectService` for project rules, `GenericRepository` for data access). **O**pen/closed via specifications and interfaces. **L**iskov through `BaseEntity<T>` and generic repositories. **I**nterface segregation (`IProjectService`, `ITaskService`, `IAuthService`, `IUnitOfWork`). **D**ependency inversion: high-level code depends on abstractions in `Domain` and `ServiceAbstraction`, not concrete persistence. |
+| **DTO Usage** | Request/response models live in **SharedData/DTOs** (e.g. `CreateProjectDTO`, `TaskResultDTO`). AutoMapper profiles map between DTOs and domain entities so controllers and clients never depend on persistence models directly. |
+| **Global Exception Handling** | `CustomExceptionMiddleware` catches unhandled exceptions, maps domain exceptions (`NotFoundException`, `BadRequestException`) to HTTP status codes, and returns a consistent `ErrorModel` JSON payload. |
+| **Validation** | Data annotations on DTOs (`[Required]`, `[MaxLength]`, `[Compare]`) plus `ModelState` checks in controllers return structured `ApiResponse` validation errors before business logic runs. |
 
-## 🏗️ Overview
+---
 
-**OnionArchDemo** is a demonstration project that implements the **Onion Architecture** (also known as Clean Architecture) in .NET 8. This architecture promotes:
-
-- 🔄 **Dependency Inversion**: High-level modules don't depend on low-level modules
-- 🧩 **Separation of Concerns**: Clear boundaries between different layers
-- 🧪 **Testability**: Easy to unit test business logic
-- 🔧 **Maintainability**: Changes in one layer don't affect others
-- 📈 **Scalability**: Easy to extend and modify
-
-## 🎯 Architecture
-
-### Onion Architecture Diagram
-
-```mermaid
-graph TB
-    subgraph "🌐 Presentation Layer"
-        A[Controllers]
-        B[API Endpoints]
-        C[SignalR Hubs]
-    end
-    
-    subgraph "🔧 Infrastructure Layer"
-        D[Persistence]
-        E[External APIs]
-        F[File System]
-    end
-    
-    subgraph "⚙️ Application Layer"
-        G[Services]
-        H[Use Cases]
-        I[DTOs]
-    end
-    
-    subgraph "🏛️ Domain Layer"
-        J[Entities]
-        K[Contracts]
-        L[Specifications]
-        M[Domain Services]
-    end
-    
-    A --> G
-    B --> G
-    C --> G
-    G --> J
-    G --> K
-    D --> J
-    E --> G
-    F --> G
-    
-    style J fill:#e1f5fe
-    style K fill:#e1f5fe
-    style L fill:#e1f5fe
-    style M fill:#e1f5fe
-    style G fill:#f3e5f5
-    style H fill:#f3e5f5
-    style I fill:#f3e5f5
-    style A fill:#fff3e0
-    style B fill:#fff3e0
-    style C fill:#fff3e0
-    style D fill:#e8f5e8
-    style E fill:#e8f5e8
-    style F fill:#e8f5e8
-```
-
-### Layer Dependencies
-
-```mermaid
-flowchart LR
-    subgraph "Dependencies Flow"
-        A[Presentation] --> B[Application]
-        B --> C[Domain]
-        D[Infrastructure] --> C
-        D --> B
-    end
-    
-    subgraph "Dependency Rule"
-        E[🔴 No dependencies inward]
-        F[🟢 Dependencies point inward]
-        G[🟡 Domain has no dependencies]
-    end
-```
-
-## 📊 Logging Architecture
-
-### Logging Layer Overview
-
-The project implements a comprehensive logging strategy using **Serilog** with structured logging across all layers. The logging architecture follows the Onion Architecture principles, ensuring that logging concerns are properly separated and injected where needed.
-
-```mermaid
-graph TB
-    subgraph "🌐 Presentation Layer"
-        A[Controllers]
-        B[SignalR Hubs]
-        A1[Request/Response Logging]
-        B1[Real-time Event Logging]
-    end
-    
-    subgraph "⚙️ Application Layer"
-        C[Services]
-        C1[Business Operation Logging]
-        C2[Performance Monitoring]
-    end
-    
-    subgraph "🔧 Infrastructure Layer"
-        D[Persistence Layer]
-        D1[Database Operation Logging]
-        D2[Query Performance Logging]
-        D3[Transaction Logging]
-    end
-    
-    subgraph "📝 Logging Infrastructure"
-        E[Serilog]
-        F[Structured Logging]
-        G[Multiple Sinks]
-        H[Log Aggregation]
-    end
-    
-    A --> A1
-    B --> B1
-    C --> C1
-    C --> C2
-    D --> D1
-    D --> D2
-    D --> D3
-    
-    A1 --> E
-    B1 --> E
-    C1 --> E
-    C2 --> E
-    D1 --> E
-    D2 --> E
-    D3 --> E
-    
-    E --> F
-    E --> G
-    E --> H
-    
-    style E fill:#ffeb3b
-    style F fill:#ffeb3b
-    style G fill:#ffeb3b
-    style H fill:#ffeb3b
-```
-
-### Logging Flow Diagram
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant Controller
-    participant Service
-    participant Repository
-    participant LoggingRepo
-    participant Serilog
-    participant LogSinks
-    
-    Client->>Controller: HTTP Request
-    Note over Controller: Log Request Details
-    
-    Controller->>Service: Call Business Logic
-    Note over Service: Log Business Operation Start
-    
-    Service->>Repository: Data Access Request
-    Repository->>LoggingRepo: Log Database Operation
-    
-    LoggingRepo->>Serilog: Structured Log Entry
-    Serilog->>LogSinks: Write to Multiple Destinations
-    
-    Repository-->>Service: Data Result
-    Note over Service: Log Business Operation Success
-    
-    Service-->>Controller: Business Result
-    Note over Controller: Log Response Details
-    
-    Controller-->>Client: HTTP Response
-```
-
-### Logging Repository Pattern
-
-The `LoggingRepository` implements a specialized logging pattern for database operations, providing:
-
-- **Performance Monitoring**: Track operation duration
-- **Structured Logging**: Consistent log format across all database operations
-- **Error Context**: Rich error information with entity and ID context
-- **Async Support**: Non-blocking logging for performance-critical operations
-
-```mermaid
-classDiagram
-    class ILoggingRepository {
-        <<interface>>
-        +LogDatabaseOperation(operation, entity, id)
-        +LogDatabaseError(operation, entity, ex, id)
-        +LogDatabaseOperationAsync(operation, entity, dbOperation, id)
-    }
-    
-    class LoggingRepository {
-        -ILogger _logger
-        +LogDatabaseOperation(operation, entity, id)
-        +LogDatabaseError(operation, entity, ex, id)
-        +LogDatabaseOperationAsync(operation, entity, dbOperation, id)
-    }
-    
-    class ILogger {
-        <<interface>>
-        +LogInformation(message, args)
-        +LogError(ex, message, args)
-    }
-    
-    ILoggingRepository <|.. LoggingRepository
-    LoggingRepository --> ILogger
-```
-
-### Logging Configuration Structure
-
-```mermaid
-graph LR
-    subgraph "Configuration Sources"
-        A[appsettings.json]
-        B[appsettings.Development.json]
-        C[Environment Variables]
-    end
-    
-    subgraph "Serilog Configuration"
-        D[Minimum Log Level]
-        E[Log Sinks]
-        F[Enrichers]
-        G[Filters]
-    end
-    
-    subgraph "Log Destinations"
-        H[Console]
-        I[File System]
-        J[Database]
-        K[External Services]
-    end
-    
-    A --> D
-    B --> D
-    C --> D
-    
-    D --> E
-    E --> H
-    E --> I
-    E --> J
-    E --> K
-    
-    style D fill:#4caf50
-    style E fill:#4caf50
-    style F fill:#4caf50
-    style G fill:#4caf50
-```
-
-### Logging Usage Examples
-
-#### 1. **Database Operation Logging**
-```csharp
-// In Repository Layer
-public async Task<User> GetByIdAsync(int id)
-{
-    return await _loggingRepository.LogDatabaseOperationAsync(
-        "SELECT",           // Operation type
-        "User",            // Entity name
-        async () => await _context.Users.FindAsync(id),  // Database operation
-        id                 // Entity ID for context
-    );
-}
-```
-
-#### 2. **Business Operation Logging**
-```csharp
-// In Service Layer
-public async Task<bool> ProcessUserRequest(int userId)
-{
-    _logger.LogInformation("Processing user request for User ID: {UserId}", userId);
-    
-    try
-    {
-        var result = await _userRepository.ProcessRequestAsync(userId);
-        _logger.LogInformation("User request processed successfully for User ID: {UserId}", userId);
-        return result;
-    }
-    catch (Exception ex)
-    {
-        _logger.LogError(ex, "Failed to process user request for User ID: {UserId}", userId);
-        throw;
-    }
-}
-```
-
-#### 3. **Request/Response Logging**
-```csharp
-// In Controller Layer
-[HttpGet("{id}")]
-public async Task<IActionResult> GetUser(int id)
-{
-    _logger.LogInformation("GET request received for user with ID: {UserId}", id);
-    
-    try
-    {
-        var user = await _userService.GetByIdAsync(id);
-        _logger.LogInformation("User retrieved successfully. ID: {UserId}, Name: {UserName}", id, user.Name);
-        return Ok(user);
-    }
-    catch (NotFoundException ex)
-    {
-        _logger.LogWarning("User not found with ID: {UserId}", id);
-        return NotFound();
-    }
-    catch (Exception ex)
-    {
-        _logger.LogError(ex, "Error retrieving user with ID: {UserId}", id);
-        return StatusCode(500, "Internal server error");
-    }
-}
-```
-
-### Logging Benefits
-
-| Benefit | Description | Implementation |
-|---------|-------------|----------------|
-| **🔍 Observability** | Complete visibility into application behavior | Structured logging with context |
-| **📊 Performance Monitoring** | Track operation duration and bottlenecks | Automatic timing in LoggingRepository |
-| **🐛 Debugging** | Rich context for troubleshooting | Entity IDs, operation types, error details |
-| **📈 Analytics** | Log analysis for business insights | Structured format for easy parsing |
-| **🔒 Compliance** | Audit trail for regulatory requirements | Complete operation logging |
-| **🚀 Production Support** | Real-time monitoring and alerting | Multiple log sinks and formats |
-
-### Log Sinks Configuration
-
-The project supports multiple log destinations:
-
-```json
-{
-  "Serilog": {
-    "Using": ["Serilog.Sinks.Console", "Serilog.Sinks.File", "Serilog.Sinks.Seq"],
-    "MinimumLevel": {
-      "Default": "Information",
-      "Override": {
-        "Microsoft": "Warning",
-        "System": "Warning"
-      }
-    },
-    "WriteTo": [
-      {
-        "Name": "Console",
-        "Args": {
-          "outputTemplate": "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}"
-        }
-      },
-      {
-        "Name": "File",
-        "Args": {
-          "path": "logs/app-.log",
-          "rollingInterval": "Day",
-          "retainedFileCountLimit": 31
-        }
-      },
-      {
-        "Name": "Seq",
-        "Args": {
-          "serverUrl": "http://localhost:5341"
-        }
-      }
-    ]
-  }
-}
-```
-
-## 📁 Project Structure
+## Solution structure
 
 ```
-OnionArchDemo/
-├── 🏛️ Domain/                          # Core Business Logic
-│   ├── Contracts/                      # Interfaces & Contracts
-│   │   ├── IGenaricRepository.cs      # Generic Repository Interface
-│   │   ├── IUnitOfWork.cs             # Unit of Work Interface
-│   │   └── SpecificationContracts/    # Specification Pattern
-│   ├── Entities/                      # Domain Entities
-│   │   ├── BaseEntity.cs              # Base Entity Class
-│   │   ├── CoreEntities/              # Business Entities
-│   │   └── IdentityEntity/            # Identity Entities
-│   └── Exceptions/                    # Domain Exceptions
-│
-├── ⚙️ Service/                         # Application Services
-│   ├── CoreServices/                  # Business Logic Implementation
-│   ├── Auto_Mapper_Profile/           # AutoMapper Configurations
-│   ├── Exception_Implementation/      # Exception Handling
-│   └── Specefication_Implementation/  # Specification Implementation
-│
-├── 🔧 ServiceAbstraction/             # Service Interfaces
-│   └── Class1.cs                      # Service Contracts
-│
-├── 🗄️ Presistence/                    # Data Access Layer
-│   ├── Data/                          # Database Context
-│   │   ├── ApplicationDbContext.cs    # EF Core Context
-│   │   ├── Configuration/             # Entity Configurations
-│   │   └── DataSeed/                  # Database Seeding
-│   ├── Repositories/                  # Repository Implementations
-│   │   └── GenericRepository.cs       # Generic Repository
-│   ├── UnitOfWork/                    # Unit of Work Pattern
-│   │   └── UnitOfWork.cs              # Unit of Work Implementation
-│   └── SpeceficationEvaluation.cs     # Specification Evaluator
-│
-├── 🌐 Presentation/                    # API Layer
-│   ├── Controllers/                   # API Controllers
-│   └── Hubs/                          # SignalR Hubs
-│
-├── 📦 SharedData/                      # Shared DTOs & Models
-│   ├── DTOs/                          # Data Transfer Objects
-│   └── Enums/                         # Shared Enumerations
-│
-└── 🚀 OnionArchDemo/                   # Web API Project
-    ├── Controllers/                   # API Controllers
-    ├── Program.cs                     # Application Entry Point
-    └── appsettings.json              # Configuration
+TaskManegment/
+├── Chatty/                    # Web host (TaskManagementApi) — Program.cs, middleware, Serilog
+├── Domain/                    # Entities, repository contracts, specifications, domain exceptions
+├── Service/                   # Business services, AutoMapper, specification implementations
+├── ServiceAbstraction/        # Service interfaces (IProjectService, ITaskService, IAuthService, …)
+├── Presistence/               # EF Core DbContext, migrations, GenericRepository, Unit of Work
+├── Presentation/              # API controllers
+└── SharedData/                # DTOs, enums, ApiResponse wrapper, constants
 ```
 
-## 🚀 Features
+### Layer dependencies
 
-### ✅ Implemented Patterns
-
-- **🏗️ Onion Architecture**: Clean separation of concerns
-- **📦 Repository Pattern**: Generic repository with specifications
-- **🔄 Unit of Work**: Transaction management
-- **🔍 Specification Pattern**: Flexible querying
-- **🎯 Dependency Injection**: IoC container configuration
-- **🗄️ Entity Framework Core**: ORM with SQL Server
-- **📋 AutoMapper**: Object-to-object mapping
-- **🔒 Exception Handling**: Centralized error management
-- **📝 Structured Logging**: Comprehensive logging with Serilog
-- **📊 Performance Monitoring**: Database operation timing and metrics
-
-### 🛠️ Technical Stack
-
-- **.NET 8**: Latest .NET framework
-- **ASP.NET Core Web API**: RESTful API framework
-- **Entity Framework Core**: Object-relational mapping
-- **SQL Server**: Database engine
-- **AutoMapper**: Object mapping
-- **Swagger/OpenAPI**: API documentation
-- **SignalR**: Real-time communication (planned)
-- **Serilog**: Structured logging framework
-- **Microsoft.Extensions.Logging**: Logging abstraction
-
-## ⚙️ Prerequisites
-
-Before running this project, ensure you have the following installed:
-
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- [SQL Server](https://www.microsoft.com/en-us/sql-server/sql-server-downloads) (Express or Developer Edition)
-- [Visual Studio 2022](https://visualstudio.microsoft.com/) or [VS Code](https://code.visualstudio.com/)
-- [Git](https://git-scm.com/)
-
-## 🛠️ Installation & Setup
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/yourusername/onionarchdemo.git
-cd onionarchdemo
+```
+Presentation  →  ServiceAbstraction, SharedData
+Service       →  Domain, ServiceAbstraction, SharedData
+Presistence   →  Domain
+Chatty        →  Presentation, Presistence, Service
+Domain        →  (no project references to outer layers)
 ```
 
-### 2. Restore Dependencies
+---
 
-```bash
-dotnet restore
-```
+## Features
 
-### 3. Configure Database Connection
+### Authentication & authorization
 
-Update the connection string in `OnionArchDemo/appsettings.json`:
+- **Register** — Create users with ASP.NET Core Identity (`ApplicationUser`).
+- **Login** — Email/password sign-in; returns JWT access token.
+- **Refresh token** — Rotate access tokens using a stored refresh token.
+- **JWT Bearer** — Protected project and task endpoints require a valid token (`[Authorize]` on `ProjectController` and `TaskController`).
 
-```json
-{
-  "ConnectionStrings": {
-    "DefaultConnection": "Server=(localdb)\\mssqllocaldb;Database=OnionArchDemoDb;Trusted_Connection=true;MultipleActiveResultSets=true"
-  }
-}
-```
+### Project management
 
-### 4. Run Database Migrations
+- Create, read, update, and delete projects.
+- Projects are scoped to the authenticated user (`OwnerId`).
+- Fields: name, description, created date.
 
-```bash
-cd Presistence
-dotnet ef database update
-```
+### Task management
 
-## 🏃‍♂️ Running the Application
+- Create tasks under a project (title, description, status, due date, priority).
+- Update task status.
+- List tasks by project.
+- Delete tasks.
+- Ownership enforced via specifications (user must own the project).
 
-### Development Mode
+### Data access patterns
 
-```bash
-cd OnionArchDemo
-dotnet run
-```
+- **Repository pattern** — `IGenaricRepository<T, TK>` with `GenericRepository` implementation.
+- **Unit of Work** — `IUnitOfWork` coordinates repositories and `SaveChangesAsync`.
+- **Specification pattern** — Query filters such as `ProjectsByOwnerSpecification`, `TaskByIdAndOwnerSpecification` keep data access logic reusable and testable.
+- **Entity Framework Core** — SQL Server with fluent configurations in `Presistence/Data/Configuration`.
 
-The application will be available at:
-- **API**: https://localhost:7001
-- **Swagger UI**: https://localhost:7001/swagger
+### Cross-cutting concerns
 
-### Production Mode
+- **Structured logging** — Serilog (console + rolling file) and `ILoggingService` for operation-level logs.
+- **HTTP request logging** — `UseSerilogRequestLogging()` in the pipeline.
+- **Uniform API responses** — `ApiResponse<T>` wrapper for success/failure payloads.
+- **CORS** — `AllowAll` policy for development.
+- **Swagger / OpenAPI** — Available in Development environment.
 
-```bash
-dotnet publish -c Release
-dotnet OnionArchDemo.dll
-```
+### Domain model
 
-## 📊 Database Configuration
+| Entity | Purpose |
+|--------|---------|
+| `ApplicationUser` | Identity user (auth) |
+| `RefreshToken` | JWT refresh token storage |
+| `Project` | Container for tasks; owned by a user |
+| `TaskItem` | Task with status, priority, due date, project link |
 
-### Entity Framework Setup
+### Task status & priority
 
-The project uses Entity Framework Core with the following configuration:
+- **Status:** `Pending`, `InProgress`, `Completed` (see `SharedData/Enums/TaskItemStatus.cs`)
+- **Priority:** `Low`, `Medium`, `High` (see `SharedData/Enums/TaskPriority.cs`)
 
-```csharp
-// PresistenceLayerConfiguration.cs
-services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(
-        configuration.GetConnectionString("DefaultConnection"),
-        sqlOptions => sqlOptions.EnableRetryOnFailure()
-    ));
-```
+---
 
-### Repository Pattern Implementation
+## API endpoints
 
-```csharp
-// Generic Repository with Specification Pattern
-public class GenericRepository<T, TK> : IGenaricRepository<T, TK> 
-    where T : BaseEntity<TK>
-{
-    // CRUD operations with specification support
-}
-```
+### Auth (`/api/Auth`) — no authorization required
 
-## 🔧 Configuration
+| Method | Route | Description |
+|--------|-------|-------------|
+| POST | `/api/Auth/Register` | Register a new user |
+| POST | `/api/Auth/Login` | Login and receive JWT |
+| POST | `/api/Auth/RefreshToken?token={refreshToken}` | Refresh access token |
 
-### App Settings Structure
+### Projects (`/api/Project`) — requires JWT
 
-```json
-{
-  "ConnectionStrings": {
-    "DefaultConnection": "your-connection-string"
-  },
-  "Logging": {
-    "LogLevel": {
-      "Default": "Information",
-      "Microsoft.AspNetCore": "Warning"
-    }
-  },
-  "AllowedHosts": "*"
-}
-```
+| Method | Route | Description |
+|--------|-------|-------------|
+| POST | `/api/Project` | Create project |
+| GET | `/api/Project` | List current user's projects |
+| GET | `/api/Project/{id}` | Get project by id |
+| PUT | `/api/Project/{id}` | Update project |
+| DELETE | `/api/Project/{id}` | Delete project |
 
-### Dependency Injection Setup
+### Tasks (`/api/Task`) — requires JWT
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| POST | `/api/Task` | Create task |
+| PUT | `/api/Task/{id}/status` | Update task status |
+| GET | `/api/Task/project/{projectId}` | List tasks for a project |
+| DELETE | `/api/Task/{id}` | Delete task |
+
+---
+
+## Architecture deep dive
+
+### Clean Architecture
+
+- **Domain** holds core business types (`Project`, `TaskItem`), contracts (`IUnitOfWork`, `ISpecification`), and domain exceptions.
+- **Application logic** lives in **Service** (`ProjectService`, `TaskService`, `AuthService`).
+- **Infrastructure** is **Presistence** (EF Core, SQL Server, repositories).
+- **Presentation** stays thin: validate input, call services, map HTTP status codes.
+- **Chatty** bootstraps DI, middleware, authentication, and logging.
+
+### Dependency Injection
+
+Registrations (simplified):
 
 ```csharp
 // Program.cs
 builder.Services.AddPresistenceConfig(builder.Configuration);
-builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddServiceConfiguration();
+
+// PresistenceLayerConfiguration.cs
+services.AddDbContext<ApplicationDbContext>(...);
+services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+// ServiceLayerConfigurations.cs
+services.AddScoped<IAuthService, AuthService>();
+services.AddScoped<IProjectService, ProjectService>();
+services.AddScoped<ITaskService, TaskService>();
+services.AddSingleton<ILoggingService, LoggingService>();
+services.AddAutoMapper(...);
 ```
 
-### Logging Configuration Setup
+Controllers receive `IProjectService`, `ITaskService`, or `IAuthService` via constructor injection.
+
+### DTO usage
+
+| DTO | Usage |
+|-----|--------|
+| `RegisterDTO`, `LoginDTO` | Auth requests |
+| `RegisterResultDTO`, `LoginResultDTO` | Auth responses |
+| `CreateProjectDTO`, `UpdateProjectDTO`, `ProjectResultDTO` | Project CRUD |
+| `CreateTaskDTO`, `UpdateTaskStatusDTO`, `TaskResultDTO` | Task operations |
+
+AutoMapper profiles: `ProjectMappingProfile`, `TaskMappingProfile`.
+
+### Global exception handling
+
+`CustomExceptionMiddleware` runs early in the pipeline and:
+
+- Maps `NotFoundException` → **404**
+- Maps `BadRequestException` → **400**
+- Maps other exceptions → **500**
+- Returns JSON `ErrorModel` with `statusCode` and `message`
+- Handles unmatched routes with a 404 response body
+
+### Validation
+
+Example DTO validation (`CreateProjectDTO`):
 
 ```csharp
-// Program.cs
-builder.Host.UseSerilog((context, services, configuration) => configuration
-    .ReadFrom.Configuration(context.Configuration)
-    .ReadFrom.Services(services)
-    .Enrich.FromLogContext()
-    .WriteTo.Console()
-    .WriteTo.File("logs/app-.log", rollingInterval: RollingInterval.Day)
-    .WriteTo.Seq("http://localhost:5341"));
+[Required]
+[MaxLength(200)]
+public string Name { get; set; }
+
+[MaxLength(1000)]
+public string Description { get; set; }
 ```
 
-The logging configuration supports:
-- **Console Logging**: For development and debugging
-- **File Logging**: Daily rolling log files with retention
-- **Structured Logging**: JSON format for log aggregation tools
-- **Performance Monitoring**: Automatic timing for database operations
-- **Error Context**: Rich error information with stack traces
+Controllers check `ModelState.IsValid` and return:
 
-## 🧪 Testing
-
-### Running Tests
-
-```bash
-# Run all tests
-dotnet test
-
-# Run tests with coverage
-dotnet test --collect:"XPlat Code Coverage"
+```json
+{
+  "success": false,
+  "message": "Validation failed",
+  "errors": { "Name": ["The Name field is required."] }
+}
 ```
 
-### Test Structure
-
-```
-Tests/
-├── Domain.Tests/           # Domain layer tests
-├── Service.Tests/          # Service layer tests
-├── Presistence.Tests/      # Data access tests
-└── Integration.Tests/      # Integration tests
-```
-
-## 📚 API Documentation
-
-### Swagger UI
-
-Access the interactive API documentation at:
-```
-https://localhost:7001/swagger
-```
-
-### API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/weatherforecast` | Get weather forecast |
-| POST | `/api/entities` | Create new entity |
-| GET | `/api/entities/{id}` | Get entity by ID |
-| PUT | `/api/entities/{id}` | Update entity |
-| DELETE | `/api/entities/{id}` | Delete entity |
-
-## 🏗️ Architecture Benefits
-
-### 1. **Dependency Inversion**
-- High-level modules don't depend on low-level modules
-- Both depend on abstractions
-
-### 2. **Separation of Concerns**
-- Clear boundaries between layers
-- Each layer has a specific responsibility
-
-### 3. **Testability**
-- Business logic can be tested independently
-- Easy to mock dependencies
-
-### 4. **Maintainability**
-- Changes in one layer don't affect others
-- Easy to understand and modify
-
-### 5. **Scalability**
-- Easy to add new features
-- Simple to extend existing functionality
-
-## 🔄 Data Flow
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant Controller
-    participant Service
-    participant Repository
-    participant LoggingRepo
-    participant Database
-    
-    Client->>Controller: HTTP Request
-    Note over Controller: Log Request Details
-    
-    Controller->>Service: Call Business Logic
-    Note over Service: Log Business Operation Start
-    
-    Service->>Repository: Data Access Request
-    Repository->>LoggingRepo: Log Database Operation Start
-    
-    Repository->>Database: Query/Command
-    Database-->>Repository: Result
-    
-    Repository->>LoggingRepo: Log Database Operation Success
-    LoggingRepo-->>Repository: Logging Complete
-    
-    Repository-->>Service: Data
-    Note over Service: Log Business Operation Success
-    
-    Service-->>Controller: Business Result
-    Note over Controller: Log Response Details
-    
-    Controller-->>Client: HTTP Response
-```
-
-## 🔍 Logging Best Practices & Troubleshooting
-
-### Best Practices
-
-1. **Use Structured Logging**: Always use structured logging with parameters instead of string concatenation
-   ```csharp
-   // ✅ Good
-   _logger.LogInformation("User {UserId} accessed {Resource}", userId, resourceName);
-   
-   // ❌ Bad
-   _logger.LogInformation("User " + userId + " accessed " + resourceName);
-   ```
-
-2. **Log at Appropriate Levels**:
-   - **Trace**: Detailed debugging information
-   - **Debug**: General debugging information
-   - **Information**: General application flow
-   - **Warning**: Unexpected but handled situations
-   - **Error**: Errors that need immediate attention
-   - **Fatal**: Application cannot continue
-
-3. **Include Context**: Always include relevant context (IDs, operation types, entity names)
-4. **Performance Considerations**: Use async logging for performance-critical operations
-5. **Error Logging**: Always log exceptions with context and stack traces
-
-### Troubleshooting Common Issues
-
-#### Log Files Not Created
-- Check if the `logs` directory exists
-- Verify write permissions for the application
-- Check Serilog configuration in `appsettings.json`
-
-#### Performance Issues
-- Ensure logging is not blocking main operations
-- Use async logging methods when possible
-- Configure appropriate log levels for production
-
-#### Missing Logs
-- Verify log level configuration
-- Check if logs are being written to different sinks
-- Ensure Serilog is properly configured in `Program.cs`
-
-### Log Analysis Tools
-
-- **Seq**: For log aggregation and analysis
-- **ELK Stack**: Elasticsearch, Logstash, Kibana
-- **Azure Application Insights**: For Azure-hosted applications
-- **Custom Scripts**: Parse structured logs for specific metrics
-
-## 🤝 Contributing
-
-We welcome contributions! Please follow these steps:
-
-1. **Fork** the repository
-2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
-3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
-4. **Push** to the branch (`git push origin feature/amazing-feature`)
-5. **Open** a Pull Request
-
-### Development Guidelines
-
-- Follow the existing code style
-- Add unit tests for new features
-- Update documentation as needed
-- Ensure all tests pass before submitting
-- Follow logging best practices when adding new features
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- **Onion Architecture** by Jeffrey Palermo
-- **Clean Architecture** by Robert C. Martin
-- **.NET Community** for excellent tooling and documentation
+`RegisterDTO` additionally uses `[Compare("Password")]` for confirm-password validation.
 
 ---
 
-<div align="center">
+## Prerequisites
 
-**Made with ❤️ for the .NET Community**
+- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- SQL Server (LocalDB, Express, or full instance)
+- Optional: Visual Studio 2022 or VS Code
 
-[![GitHub stars](https://img.shields.io/github/stars/yourusername/onionarchdemo?style=social)](https://github.com/yourusername/onionarchdemo)
-[![GitHub forks](https://img.shields.io/github/forks/yourusername/onionarchdemo?style=social)](https://github.com/yourusername/onionarchdemo)
-[![GitHub issues](https://img.shields.io/github/issues/yourusername/onionarchdemo)](https://github.com/yourusername/onionarchdemo/issues)
+## Getting started
 
-</div>
+### 1. Clone and restore
+
+```bash
+git clone <repository-url>
+cd TaskManegment
+dotnet restore
+```
+
+### 2. Configure database and JWT
+
+Edit `Chatty/appsettings.json` (or `appsettings.Development.json`):
+
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=(localdb)\\mssqllocaldb;Database=TaskManagementApi;Trusted_Connection=true;TrustServerCertificate=true"
+  },
+  "JWT": {
+    "Issuer": "TaskManagementApi",
+    "Audience": "TaskManagementApi",
+    "Key": "<your-secret-key-at-least-32-characters>"
+  }
+}
+```
+
+### 3. Apply migrations
+
+```bash
+cd Presistence
+dotnet ef database update --startup-project ../Chatty
+```
+
+### 4. Run the API
+
+```bash
+cd Chatty
+dotnet run
+```
+
+- **Swagger UI:** `https://localhost:<port>/swagger` (Development)
+- Use **Login** or **Register**, then authorize in Swagger with `Bearer <token>` for protected endpoints.
+
+## Tech stack
+
+| Technology | Role |
+|------------|------|
+| .NET 8 | Runtime and Web API |
+| ASP.NET Core Identity | User management |
+| JWT Bearer | API authentication |
+| Entity Framework Core 8 | ORM |
+| SQL Server | Database |
+| AutoMapper | DTO ↔ entity mapping |
+| Serilog | Logging |
+| Swashbuckle | OpenAPI / Swagger |
+
+## Additional documentation
+
+- [LOGGING_GUIDE.md](LOGGING_GUIDE.md) — Serilog setup and `ILoggingService` usage examples.
+
+## License
+
+See repository license file if present.
