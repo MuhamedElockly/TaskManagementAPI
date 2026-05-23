@@ -32,10 +32,10 @@ namespace Presistence.Repositories
 
 		public async Task DeleteAsync(TK id)
 		{
-			T enity = await _context.Set<T>().FirstOrDefaultAsync();
-			if (enity != null)
+			var entity = await _context.Set<T>().FindAsync(id);
+			if (entity != null)
 			{
-				_context.Set<T>().Remove(enity);
+				_context.Set<T>().Remove(entity);
 			}
 		}
 

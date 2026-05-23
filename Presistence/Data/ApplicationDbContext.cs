@@ -1,12 +1,7 @@
-﻿using Domain.Entities.IdentityEntity;
+﻿using Domain.Entities.CoreEntities;
+using Domain.Entities.IdentityEntity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection.Metadata;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Presistence.Data
 {
@@ -16,14 +11,15 @@ namespace Presistence.Data
             : base(options)
         {
         }
+
+        public DbSet<Project> Projects { get; set; }
+        public DbSet<TaskItem> Tasks { get; set; }
+        public DbSet<RefreshToken> RefreshTokens { get; set; }
+
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
             builder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);
-
         }
-
-        public DbSet<RefreshToken> RefreshTokens { get; set; }
-
     }
 }

@@ -87,6 +87,7 @@ namespace ECommerce
 			#endregion
 			app.UseHttpsRedirection();
 
+			app.UseAuthentication();
 			app.UseAuthorization();
 
 
