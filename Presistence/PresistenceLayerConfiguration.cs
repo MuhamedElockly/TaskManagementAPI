@@ -7,19 +7,19 @@ using Domain.Contracts;
 
 namespace Presistence
 {
-	public static class PresistenceLayerConfiguration
-	{
-		public static IServiceCollection AddPresistenceConfig(this IServiceCollection services, IConfiguration configuration)
-		{
-			services.AddDbContext<ApplicationDbContext>(options =>
-			options.UseSqlServer(
-				configuration.GetConnectionString("DefaultConnection"),
-			sqlOptions => sqlOptions.EnableRetryOnFailure()
-			));
-			services.AddScoped<IUnitOfWork, UnitOfWork.UnitOfWork>();
-	
+    public static class PresistenceLayerConfiguration
+    {
+        public static IServiceCollection AddPresistenceConfig(this IServiceCollection services, IConfiguration configuration)
+        {
+            services.AddDbContext<ApplicationDbContext>(options =>
+            options.UseSqlServer(
+                configuration.GetConnectionString("DefaultConnection"),
+            sqlOptions => sqlOptions.EnableRetryOnFailure()
+            ));
+            services.AddScoped<IUnitOfWork, UnitOfWork.UnitOfWork>();
 
-			return services;
-		}
-	}
+
+            return services;
+        }
+    }
 }
