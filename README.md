@@ -15,6 +15,23 @@ The project demonstrates the following architectural and design practices:
 | **Global Exception Handling** | `CustomExceptionMiddleware` catches unhandled exceptions, maps domain exceptions (`NotFoundException`, `BadRequestException`) to HTTP status codes, and returns a consistent `ErrorModel` JSON payload. |
 | **Validation** | Data annotations on DTOs (`[Required]`, `[MaxLength]`, `[Compare]`) plus `ModelState` checks in controllers return structured `ApiResponse` validation errors before business logic runs. |
 
+## Additional Requirements & Patterns
+
+Beyond the core architecture requirements, the project also demonstrates these patterns and capabilities:
+
+| Requirement / Pattern | How it is implemented in this project |
+|-----------------------|----------------------------------------|
+| **Specification Pattern** | Query logic is encapsulated in specification classes (`ProjectsByOwnerSpecification`, `TaskByIdAndOwnerSpecification`, etc.) that implement `ISpecification<T, TK>`. The persistence layer applies them via `SpeceficationEvaluation.ApplySpecefication` before EF Core executes the query. |
+| **Repository Pattern** | `IGenaricRepository<T, TK>` and `GenericRepository<T, TK>` provide generic CRUD and specification-based reads without leaking EF Core into the service layer. |
+| **Unit of Work Pattern** | `IUnitOfWork` manages a shared `ApplicationDbContext`, caches repository instances per entity type, and exposes `SaveChangesAsync` for transactional commits. |
+| **Structured Logging** | **Serilog** writes to console and rolling JSON log files; **ILoggingService** wraps `ILogger<T>` with `LogOperationAsync` for timed business operations. |
+| **AutoMapper** | Profiles in `Service/Auto_Mapper_Profile` map DTOs ↔ domain entities so services stay focused on rules, not manual property copying. |
+| **Uniform API Response** | `ApiResponse<T>` standardizes success/failure shape (`Success`, `Message`, `Data`, `Errors`) across all controllers. |
+| **JWT Authentication** | Access tokens issued on login; refresh tokens stored in the database and validated via specifications. |
+| **User-Scoped Data Access** | Projects and tasks are filtered by the authenticated user's `OwnerId` using specifications — users cannot access another user's resources. |
+| **EF Core Fluent Configuration** | Entity rules (keys, relationships, constraints) live in `Presistence/Data/Configuration` instead of attributes on domain entities. |
+| **Domain Exceptions** | `NotFoundException` and `BadRequestException` in the Domain layer express business failures that middleware maps to HTTP responses. |
+
 ---
 
 ## Solution structure
@@ -67,18 +84,22 @@ Domain        →  (no project references to outer layers)
 
 ### Data access patterns
 
-- **Repository pattern** — `IGenaricRepository<T, TK>` with `GenericRepository` implementation.
-- **Unit of Work** — `IUnitOfWork` coordinates repositories and `SaveChangesAsync`.
-- **Specification pattern** — Query filters such as `ProjectsByOwnerSpecification`, `TaskByIdAndOwnerSpecification` keep data access logic reusable and testable.
-- **Entity Framework Core** — SQL Server with fluent configurations in `Presistence/Data/Configuration`.
+See [Specification pattern (detailed)](#specification-pattern-detailed), [Repository pattern](#repository-pattern), and [Unit of Work pattern](#unit-of-work-pattern) for full explanations.
+
+- **Repository pattern** — Generic CRUD + specification-based queries.
+- **Unit of Work** — Single `DbContext` and `SaveChangesAsync` per request.
+- **Specification pattern** — Reusable, composable query objects (7 specifications in the solution).
+- **Entity Framework Core** — SQL Server with fluent entity configurations.
 
 ### Cross-cutting concerns
 
-- **Structured logging** — Serilog (console + rolling file) and `ILoggingService` for operation-level logs.
-- **HTTP request logging** — `UseSerilogRequestLogging()` in the pipeline.
-- **Uniform API responses** — `ApiResponse<T>` wrapper for success/failure payloads.
-- **CORS** — `AllowAll` policy for development.
-- **Swagger / OpenAPI** — Available in Development environment.
+See [Logging (detailed)](#logging-detailed) and [Additional features (detailed)](#additional-features-detailed).
+
+- **Serilog** — Console + rolling JSON log files; HTTP request logging.
+- **ILoggingService** — Timed business operations via `LogOperationAsync`.
+- **ApiResponse wrapper** — Consistent API contract for all endpoints.
+- **AutoMapper** — DTO ↔ entity mapping profiles.
+- **CORS & Swagger** — Dev-friendly API exploration and frontend integration.
 
 ### Domain model
 
@@ -205,6 +226,254 @@ Controllers check `ModelState.IsValid` and return:
 ```
 
 `RegisterDTO` additionally uses `[Compare("Password")]` for confirm-password validation.
+
+---
+
+## Specification pattern (detailed)
+
+The **Specification pattern** keeps query logic out of services and repositories. Each specification defines *what* to fetch; the generic repository defines *how* to run it against EF Core.
+
+### How it works
+
+```mermaid
+flowchart LR
+    Service["ProjectService / TaskService / AuthService"]
+    Spec["Specification class\n(e.g. ProjectsByOwnerSpecification)"]
+    Repo["GenericRepository"]
+    Eval["SpeceficationEvaluation"]
+    EF["EF Core IQueryable"]
+    DB[(SQL Server)]
+
+    Service --> Spec
+    Service --> Repo
+    Repo --> Eval
+    Eval --> EF
+    EF --> DB
+```
+
+1. **Define criteria** — A specification inherits `Specification<T, TK>` and passes a `Expression<Func<T, bool>>` filter to the base constructor.
+2. **Add options** — Optionally configure includes, ordering, or paging on the base class.
+3. **Use in service** — The service calls `_unitOfWork.GetRepository<T, TK>().GetAllAsynce(spec)` or `GetByIdAsync(spec)`.
+4. **Apply in persistence** — `GenericRepository` calls `query.ApplySpecefication(specification)`, which builds the final `IQueryable<T>`.
+
+### Base specification capabilities
+
+| Capability | Method / property | Purpose |
+|------------|-------------------|---------|
+| Filter | `Criteria` | `Where` clause (required in constructor) |
+| Eager load | `AddInclude` / `Includes` | Related entities (e.g. `TaskItem.Project`) |
+| Sort ascending | `SetOrderBy` | `OrderBy` |
+| Sort descending | `SetOrderByDescending` | `OrderByDescending` |
+| Paging | `ApplyPaging(skip, take)` | `Skip` + `Take` |
+
+### Specifications in this project
+
+| Specification | Entity | Purpose |
+|---------------|--------|---------|
+| `ProjectsByOwnerSpecification` | `Project` | All projects for the current user; ordered by `CreatedAt` descending |
+| `ProjectByIdAndOwnerSpecification` | `Project` | Single project by id, only if owned by the user |
+| `TasksByProjectSpecification` | `TaskItem` | All tasks belonging to a project |
+| `TasksByProjectAndOwnerSpecification` | `TaskItem` | Tasks for a project, with owner check via `Project.OwnerId` |
+| `TaskByIdSpecification` | `TaskItem` | Task by id |
+| `TaskByIdAndOwnerSpecification` | `TaskItem` | Task by id; includes `Project` and verifies `Project.OwnerId` |
+| `RefreshTokenSpecifications` | `RefreshToken` | Lookup refresh token string; includes `User` for token refresh flow |
+
+### Example
+
+```csharp
+// Service layer — only pass owner id; no raw LINQ in the service
+var spec = new ProjectsByOwnerSpecification(ownerId);
+var projects = await repo.GetAllAsynce(spec);
+
+// Specification class
+public class ProjectsByOwnerSpecification : Specification<Project, int>
+{
+    public ProjectsByOwnerSpecification(string ownerId)
+        : base(p => p.OwnerId == ownerId)
+    {
+        SetOrderByDescending(p => p.CreatedAt);
+    }
+}
+```
+
+### Benefits
+
+- **Reusable** — Same filter used in multiple service methods without duplication.
+- **Testable** — Specifications can be unit-tested as expression trees.
+- **Composable** — Base class supports includes, sort, and paging for richer queries later.
+- **Open/closed** — New queries = new specification class; repository and evaluator stay unchanged.
+
+---
+
+## Logging (detailed)
+
+Logging is implemented at two levels: **infrastructure logging** (Serilog) and **application logging** (`ILoggingService`).
+
+### Serilog (infrastructure)
+
+Configured in `Chatty/Program.cs` and `appsettings.json`:
+
+| Sink | Output |
+|------|--------|
+| **Console** | Human-readable logs during development |
+| **File** | Rolling daily files under `logs/log-YYYYMMDD.txt` (compact JSON format) |
+
+**HTTP request logging** — `app.UseSerilogRequestLogging()` logs every request (method, path, status code, duration).
+
+**Configuration highlights** (`appsettings.json`):
+
+- Default level: `Information`
+- Microsoft/System namespaces overridden to `Warning` to reduce noise
+- Enrichers: `FromLogContext`, `WithMachineName`, `WithThreadId`
+
+### ILoggingService (application)
+
+Registered as a **singleton** in `ServiceLayerConfigurations`. Injected into controllers, services, and `CustomExceptionMiddleware`.
+
+| Method | Use case |
+|--------|----------|
+| `LogInformation` | Normal flow (e.g. "Project created successfully") |
+| `LogWarning` | Expected issues (e.g. invalid refresh token, 404 path) |
+| `LogError` | Failures and exceptions |
+| `LogDebug` | Detailed diagnostics |
+| `LogOperationAsync<T>` | Wraps async business logic; logs start, duration (ms), success or failure |
+| `LogOperation<T>` | Synchronous variant of the above |
+
+### Where logging is used
+
+| Layer | Component | What gets logged |
+|-------|-----------|------------------|
+| **Middleware** | `CustomExceptionMiddleware` | Domain exceptions, 404 paths, unhandled errors |
+| **Controllers** | `AuthController`, `ProjectController`, `TaskController` | Success paths, validation issues, caught exceptions |
+| **Services** | `ProjectService`, `TaskService`, `AuthService` | Entire operations via `LogOperationAsync` (with timing) |
+
+### Example — timed operation in a service
+
+```csharp
+public async Task<ApiResponse<ProjectResultDTO>> CreateAsync(CreateProjectDTO dto)
+{
+    return await _logger.LogOperationAsync("Create project", async () =>
+    {
+        // business logic...
+        return new ApiResponse<ProjectResultDTO> { Success = true, Data = result };
+    });
+}
+```
+
+Serilog output will include:
+
+```
+Starting operation: Create project
+Completed operation: Create project in 42.5ms
+```
+
+On failure, the exception is logged and rethrown for middleware or controller handling.
+
+See [LOGGING_GUIDE.md](LOGGING_GUIDE.md) for more examples and troubleshooting.
+
+---
+
+## Additional features (detailed)
+
+### Repository pattern
+
+`GenericRepository<T, TK>` centralizes data access for any entity inheriting `BaseEntity<TK>`:
+
+| Method | Description |
+|--------|-------------|
+| `AddAsync` | Insert entity |
+| `Update` | Track entity changes |
+| `DeleteAsync` | Remove by primary key |
+| `GetAllAsync` | All rows (no filter) |
+| `GetAllAsynce(spec)` | Filtered list via specification |
+| `GetByIdAsync(spec)` / `GetFirstOrDefaultAsync(spec)` | Single entity via specification |
+| `CountAsync(spec)` | Count rows matching specification |
+
+Repositories are obtained through the Unit of Work: `_unitOfWork.GetRepository<Project, int>()`.
+
+### Unit of Work pattern
+
+`UnitOfWork` holds one `ApplicationDbContext` per HTTP request (scoped lifetime):
+
+- Creates and caches `GenericRepository` instances per entity type name
+- `SaveChangesAsync()` commits all pending changes in a single transaction
+- Ensures services do not manage `DbContext` directly
+
+### AutoMapper
+
+Mapping profiles keep transformation logic in one place:
+
+| Profile | Mappings |
+|---------|----------|
+| `ProjectMappingProfile` | `CreateProjectDTO` → `Project`, `UpdateProjectDTO` → `Project`, `Project` → `ProjectResultDTO` |
+| `TaskMappingProfile` | `CreateTaskDTO` → `TaskItem`, `TaskItem` → `TaskResultDTO`, status updates |
+
+Registered once: `services.AddAutoMapper(typeof(ProjectMappingProfile).Assembly)`.
+
+### ApiResponse wrapper
+
+All business outcomes return a consistent JSON shape:
+
+```json
+{
+  "success": true,
+  "message": "Project created successfully",
+  "data": { "id": 1, "name": "My Project", "description": "..." },
+  "errors": null
+}
+```
+
+Static helpers: `ApiResponse<T>.SuccessResponse(data, message)` and `ApiResponse<T>.FailResponse(message, errors)`.
+
+### Centralized response messages
+
+`SharedData/Constants/ResponseMessages.cs` defines shared strings:
+
+- `ProjectNotFound`
+- `TaskNotFound`
+- `UserNotAuthenticated`
+
+Controllers map these messages to `401 Unauthorized`, `404 Not Found`, or `400 Bad Request`.
+
+### JWT authentication & refresh tokens
+
+| Feature | Implementation |
+|---------|----------------|
+| **Identity** | `ApplicationUser` + ASP.NET Core Identity with EF stores |
+| **Access token** | JWT with issuer, audience, signing key from configuration |
+| **Refresh token** | Stored as `RefreshToken` entity; looked up via `RefreshTokenSpecifications` |
+| **Protected routes** | `[Authorize]` on project and task controllers |
+| **Password rules** | Relaxed for demo (min length 6; digit/symbol not required) |
+
+### User ownership & security
+
+- `ProjectService` and `TaskService` read the current user id from JWT claims (`IHttpContextAccessor`).
+- Specifications always include `OwnerId` or navigate through `Project.OwnerId` so users only see and modify their own data.
+- Unauthenticated calls return `ApiResponse` with `UserNotAuthenticated`.
+
+### Entity Framework Core
+
+- **DbContext:** `ApplicationDbContext` (Identity + `Project` + `TaskItem`)
+- **Configurations:** `ProjectConfiguration`, `TaskItemConfiguration` (fluent API)
+- **Migrations:** Under `Presistence/Migrations`
+- **Resilience:** `EnableRetryOnFailure()` on SQL Server connection
+
+### CORS & API documentation
+
+- **CORS:** `AllowAll` policy (any origin, header, method) — suitable for local/dev frontends.
+- **Swagger:** Enabled in Development; use **Authorize** with `Bearer {token}` for protected endpoints.
+
+### Error models
+
+| Type | Used when |
+|------|-----------|
+| `ErrorModel` | Global middleware exceptions (`statusCode`, `message`) |
+| `ValidationErrorToReturn` | Structured validation error payload (available for extended validation responses) |
+| `ApiResponse.Errors` | Controller-level `ModelState` validation failures |
+
+### Base entity
+
+All core entities inherit `BaseEntity<TK>` with a typed `Id` property, enabling the generic repository and specification constraints (`where T : BaseEntity<TK>`).
 
 ---
 
